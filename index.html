@@ -37,6 +37,11 @@ details{border:1px solid var(--line);border-radius:14px;margin:8px 0;padding:11p
 .check{display:flex;gap:8px;align-items:flex-start;margin:7px 0}.dot{width:9px;height:9px;background:var(--primary);border-radius:50%;margin-top:7px;flex:none}.target{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line);padding:10px 0}.barWrap{height:10px;background:#13213a;border-radius:999px;overflow:hidden}.bar{height:100%;background:linear-gradient(90deg,var(--primary),var(--secondary))}
 .timeline{position:relative;margin-left:10px;padding-left:22px;border-left:2px solid #315176}.tl{position:relative;margin:0 0 14px}.tl:before{content:'';position:absolute;left:-30px;top:5px;width:14px;height:14px;border-radius:50%;background:var(--primary);box-shadow:0 0 0 4px rgba(0,194,255,.14)}
 @media(max-width:850px){.span4,.span5,.span6,.span7,.span8,.span12{grid-column:span 12}main{padding:12px}.tabs{justify-content:flex-start}.big{font-size:28px}.calDay{min-height:62px;padding:6px}.calLabel{display:none}}
+
+.calendarEditorPanel{margin-top:14px;border:1px solid var(--line);border-radius:18px;padding:14px;background:#0b1629}
+.calendarEditorPanel textarea{min-height:110px}
+.noteDot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#5eead4;margin-left:4px}
+
 </style>
 </head>
 <body>
@@ -74,7 +79,7 @@ details{border:1px solid var(--line);border-radius:14px;margin:8px 0;padding:11p
 </div>
 </section>
 
-<section id="calendario" class="screen"><div class="card"><div class="between"><h2 id="monthTitle">Calendario</h2><div class="row"><button class="secondary" onclick="changeMonth(-1)">← Mes</button><button class="secondary" onclick="monthToday()">Mes actual</button><button class="secondary" onclick="changeMonth(1)">Mes →</button></div></div><div class="legend"><span class="lgreen">Verde: sesión hecha</span><span class="lyellow">Amarillo: activación básica</span><span class="lred">Rojo: descanso/no sesión</span></div><div class="divider"></div><div id="monthGrid" class="monthGrid"></div><div class="divider"></div><h3>Adherencia mensual</h3><div id="adherenceBox"></div></div></section>
+<section id="calendario" class="screen"><div class="card"><div class="between"><h2 id="monthTitle">Calendario</h2><div class="row"><button class="secondary" onclick="changeMonth(-1)">← Mes</button><button class="secondary" onclick="monthToday()">Mes actual</button><button class="secondary" onclick="changeMonth(1)">Mes →</button></div></div><div class="legend"><span class="lgreen">Verde: sesión hecha</span><span class="lyellow">Amarillo: activación básica</span><span class="lred">Rojo: descanso/no sesión</span></div><div class="divider"></div><div id="monthGrid" class="monthGrid"></div><div class="divider"></div><h3>Adherencia mensual</h3><div id="adherenceBox"></div><div id="calendarDayEditor" class="calendarEditorPanel"></div></div></section>
 
 <section id="objetivos" class="screen"><div class="grid"><div class="card span6"><h2>Objetivos preoperatorios</h2><div id="preTargetsBox"></div></div><div class="card span6"><h2>Objetivos postcirugía</h2><div id="postTargetsBox"></div></div></div></section>
 
@@ -172,5 +177,146 @@ function renderAll(){surgery.value=db.settings.surgery;startDate.value=db.settin
 function setMode(m){mode=m;renderToday()}function setToday(){viewDate=localDate(new Date());calendarMonth=viewDate.slice(0,7);renderAll()}function changeDay(n){viewDate=addDays(viewDate,n);calendarMonth=viewDate.slice(0,7);renderAll()}function changeMonth(n){let [y,m]=calendarMonth.split('-').map(Number),d=new Date(y,m-1+n,1);calendarMonth=localDate(d).slice(0,7);renderAll()}function monthToday(){calendarMonth=localDate(new Date()).slice(0,7);renderAll()}function selectDate(ds){viewDate=ds;calendarMonth=ds.slice(0,7);go('hoy')}function manualPhase(v){db.settings.phase=v;save();renderAll()}function quickMark(type){rType.value=type;saveLog(true)}
 function saveLog(silent=false){db.logs[viewDate]={date:viewDate,session:rSession.value,type:rType.value,pain:rPain.value,response:rResponse.value,inflam:rInflam.value,note:rNote.value};save();renderAll();if(!silent)alert('Guardado')}function saveSettings(){db.settings.surgery=surgery.value;db.settings.start=startDate.value;db.settings.weight=weight.value;db.settings.height=height.value;save();renderAll();alert('Guardado')}function exportData(){exportBox.textContent=JSON.stringify(db,null,2)}function wipe(){if(confirm('¿Borrar datos?')){localStorage.removeItem(KEY);location.reload()}}
 function go(id){document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));document.getElementById(id).classList.add('active');document.querySelectorAll('.tabs button').forEach(b=>b.classList.remove('active'));[...document.querySelectorAll('.tabs button')].find(b=>b.textContent.toLowerCase().includes(id==='hoy'?'hoy':id==='calendario'?'calendario':id==='objetivos'?'objetivos':id==='timeline'?'timeline':id==='fases'?'fases':id==='ejercicios'?'ejercicios':id==='registro'?'registro':'ajustes')).classList.add('active');renderAll()}
+
+// === FIX CALENDARIO/REGISTRO V6.3 ===
+function viviGetLog(ds){
+  if(!db.logs) db.logs = {};
+  return db.logs[ds] || null;
+}
+function viviPlanTitle(ds){
+  try { return planForDate(ds).t; } catch(e) { return 'Sesión del día'; }
+}
+function viviSaveDay(ds, type, pain, response, inflam, note){
+  if(!db.logs) db.logs = {};
+  db.logs[ds] = {
+    date: ds,
+    session: viviPlanTitle(ds),
+    type: type || 'done',
+    pain: String(pain ?? '0'),
+    response: response || 'Igual',
+    inflam: inflam || 'No',
+    note: note || '',
+    savedAt: new Date().toISOString()
+  };
+  viewDate = ds;
+  calendarMonth = ds.slice(0,7);
+  save();
+  renderAll();
+}
+function viviEditorHtml(){
+  const panel = document.getElementById('calendarDayEditor');
+  if(!panel) return;
+  const l = viviGetLog(viewDate) || {};
+  const type = l.type || 'done';
+  panel.innerHTML = `
+    <h3>Editar día · ${viewDate}</h3>
+    <p class="muted small">${viviPlanTitle(viewDate)}</p>
+    <label>Estado</label>
+    <select id="viviEditType">
+      <option value="done" ${type==='done'?'selected':''}>Sesión hecha</option>
+      <option value="activation" ${type==='activation'?'selected':''}>Activación básica</option>
+      <option value="rest" ${type==='rest'?'selected':''}>Descanso / no sesión</option>
+    </select>
+    <label>Dolor final 0-10</label>
+    <input id="viviEditPain" type="number" min="0" max="10" value="${l.pain || '0'}">
+    <label>Rodilla después</label>
+    <select id="viviEditResponse">
+      <option ${l.response==='Mejor que antes'?'selected':''}>Mejor que antes</option>
+      <option ${!l.response || l.response==='Igual'?'selected':''}>Igual</option>
+      <option ${l.response==='Peor que antes'?'selected':''}>Peor que antes</option>
+    </select>
+    <label>Inflamada</label>
+    <select id="viviEditInflam">
+      <option ${!l.inflam || l.inflam==='No'?'selected':''}>No</option>
+      <option ${l.inflam==='Sí'?'selected':''}>Sí</option>
+    </select>
+    <label>Comentario</label>
+    <textarea id="viviEditNote" placeholder="Ej: molestia al bajar escaleras, hice express, rodilla bien...">${l.note || ''}</textarea>
+    <div class="divider"></div>
+    <div class="row">
+      <button onclick="viviSaveFromEditor()">Guardar día</button>
+      <button class="green" onclick="viviQuickCalendar('done')">Verde</button>
+      <button class="yellow" onclick="viviQuickCalendar('activation')">Amarillo</button>
+      <button class="red" onclick="viviQuickCalendar('rest')">Rojo</button>
+      <button class="secondary" onclick="viviDeleteDay()">Borrar</button>
+    </div>
+  `;
+}
+function viviSaveFromEditor(){
+  viviSaveDay(
+    viewDate,
+    document.getElementById('viviEditType').value,
+    document.getElementById('viviEditPain').value,
+    document.getElementById('viviEditResponse').value,
+    document.getElementById('viviEditInflam').value,
+    document.getElementById('viviEditNote').value
+  );
+}
+function viviQuickCalendar(type){
+  const l = viviGetLog(viewDate) || {};
+  viviSaveDay(viewDate, type, l.pain || '0', l.response || 'Igual', l.inflam || 'No', l.note || '');
+}
+function viviDeleteDay(){
+  if(confirm('¿Borrar registro de este día?')){
+    if(db.logs && db.logs[viewDate]) delete db.logs[viewDate];
+    save();
+    renderAll();
+  }
+}
+
+// Sobrescrituras seguras de funciones problemáticas
+const viviOriginalSelectDate = typeof selectDate === 'function' ? selectDate : null;
+selectDate = function(ds){
+  viewDate = ds;
+  calendarMonth = ds.slice(0,7);
+  go('calendario');
+};
+
+quickMark = function(type){
+  const l = viviGetLog(viewDate) || {};
+  viviSaveDay(viewDate, type, l.pain || '0', l.response || 'Igual', l.inflam || 'No', l.note || '');
+};
+
+saveLog = function(silent=false){
+  const ds = (typeof rDate !== 'undefined' && rDate.value) ? rDate.value : viewDate;
+  const type = (typeof rType !== 'undefined' && rType.value) ? rType.value : 'done';
+  const pain = (typeof rPain !== 'undefined' && rPain.value) ? rPain.value : '0';
+  const response = (typeof rResponse !== 'undefined' && rResponse.value) ? rResponse.value : 'Igual';
+  const inflam = (typeof rInflam !== 'undefined' && rInflam.value) ? rInflam.value : 'No';
+  const note = (typeof rNote !== 'undefined' && rNote.value) ? rNote.value : '';
+  viviSaveDay(ds, type, pain, response, inflam, note);
+  if(!silent) alert('Guardado');
+};
+
+// Decorar renderCalendar sin romper su lógica original
+const viviOriginalRenderCalendar = renderCalendar;
+renderCalendar = function(){
+  viviOriginalRenderCalendar();
+  // Añadir punto a días con comentario
+  document.querySelectorAll('.calDay').forEach(el=>{
+    const onclick = el.getAttribute('onclick') || '';
+    const m = onclick.match(/selectDate\('([^']+)'\)/);
+    if(m){
+      const l = viviGetLog(m[1]);
+      if(l && l.note && l.note.trim()){
+        const num = el.querySelector('.calNum');
+        if(num && !num.querySelector('.noteDot')) num.innerHTML += '<span class="noteDot"></span>';
+      }
+    }
+  });
+  viviEditorHtml();
+};
+
+// Historial robusto
+renderHistory = function(){
+  let arr=Object.entries(db.logs||{}).sort((a,b)=>b[0].localeCompare(a[0]));
+  history.innerHTML=arr.map(([date,l])=>{
+    const estado = l.type==='done'?'Sesión hecha':l.type==='activation'?'Activación básica':'Descanso';
+    const comentario = l.note && l.note.trim() ? `<br><b>Comentario:</b> <span class="muted">${l.note}</span>` : '<br><span class="muted">Sin comentario.</span>';
+    return `<div class="exercise"><b>${date}</b> · ${l.session||viviPlanTitle(date)}<br>Estado: ${estado} · Dolor ${l.pain||0}/10<br>Rodilla ${l.response||'Igual'} · Inflamada: ${l.inflam||'No'}${comentario}</div>`;
+  }).join('')||'Sin sesiones guardadas todavía.';
+};
+// === FIN FIX ===
+
 if('serviceWorker'in navigator)navigator.serviceWorker.register('./service-worker.js');renderAll();
 </script></body></html>
